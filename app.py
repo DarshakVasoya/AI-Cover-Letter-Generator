@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 import os
 from dotenv import load_dotenv  # type: ignore
 from io import BytesIO
@@ -17,11 +18,22 @@ except Exception:  # pragma: no cover - if dependency missing runtime error hand
     PdfReader = None  # type: ignore
 
 app = Flask(__name__)
+# Explicitly allow all origins (public API). If you later add auth, restrict this.
+CORS(
+    app,
+    resources={r"/*": {"origins": "*"}},
+    supports_credentials=False,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "OPTIONS"],
+    max_age=600,
+)
 
 @app.before_request
 def _log_request():  # lightweight request log
+    if request.method == 'OPTIONS':
+        return ('', 204)
     try:
-        print(f"[REQ] {request.method} {request.path} provider={request.values.get('provider')}")
+        print(f"[REQ] {request.method} {request.path}")
     except Exception:
         pass
 
