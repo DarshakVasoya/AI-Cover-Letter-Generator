@@ -149,7 +149,7 @@ Procfile            # Process definition (Heroku style)
 3. Open a PR describing change & testing steps
 
 ## License
-Add a license (MIT/Apache-2.0) as needed. Currently unspecified.
+This project is licensed under the MIT License - see the `LICENSE` file for details.
 
 ---
 Questions or want new features (streaming, auth, multiple providers)? Open an issue or implement and submit a PR.
