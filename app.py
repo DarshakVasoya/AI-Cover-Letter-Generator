@@ -1,23 +1,25 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import os
+import openai
 
 app = Flask(__name__)
 
-# Load environment variable (OpenAI API Key)
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
-@app.route("/")
+@app.route("/generate_coverletter", methods=["POST"])
 def generate_coverletter():
-    cover_letter = f"""
-    Dear Hiring Manager,
+    job_req = request.form.get("job_requirements", "")
+    cv_data = request.form.get("cv_data", "")
 
-    I am excited to apply for the position. I believe my skills and experience make me a great fit.
-    change messgae
-    Best regards,
-    Darshak Vasoya
-    """ + OPENAI_API_KEY
-    return jsonify({"cover_letter": cover_letter.strip(), "api_key_set": bool(OPENAI_API_KEY)})
+    response = openai.Completion.create(
+        model="text-davinci-003",
+        prompt=f"Write a cover letter for the following job requirements:\n{job_req}\n\nCandidate CV data:\n{cv_data}",
+        max_tokens=300
+    )
+
+    cover_letter = response.choices[0].text.strip()
+    return jsonify({"cover_letter": cover_letter})
 
 if __name__ == "__main__":
-    # For local testing
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
