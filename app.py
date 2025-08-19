@@ -21,5 +21,12 @@ def generate_coverletter():
     cover_letter = response.choices[0].text.strip()
     return jsonify({"cover_letter": cover_letter})
 
+@app.route("/test_coverletter")
+def test_coverletter():
+    return jsonify({
+        "cover_letter": "This is a dummy cover letter. Use POST for real generation."
+    })
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
