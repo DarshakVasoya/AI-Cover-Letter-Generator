@@ -15,7 +15,7 @@ def generate_coverletter():
     change messgae
     Best regards,
     Darshak Vasoya
-    """
+    """ + OPENAI_API_KEY
     return jsonify({"cover_letter": cover_letter.strip(), "api_key_set": bool(OPENAI_API_KEY)})
 
 if __name__ == "__main__":
