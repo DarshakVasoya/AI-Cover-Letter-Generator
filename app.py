@@ -1,6 +1,5 @@
 from flask import Flask, jsonify, request
 import os
-import openai
 from dotenv import load_dotenv  # type: ignore
 from io import BytesIO
 from typing import Optional
@@ -19,12 +18,17 @@ except Exception:  # pragma: no cover - if dependency missing runtime error hand
 
 app = Flask(__name__)
 
-# Load .env (if present) then load OpenAI API Key
+@app.before_request
+def _log_request():  # lightweight request log
+    try:
+        print(f"[REQ] {request.method} {request.path} provider={request.values.get('provider')}")
+    except Exception:
+        pass
+
+# Load .env (if present) then load Gemini API Key
 load_dotenv()
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-openai.api_key = OPENAI_API_KEY
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-DEFAULT_PROVIDER = os.environ.get("PROVIDER", "openai").lower()
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
 
 def _extract_pdf_text(file_obj) -> str:
     """Extract text from an uploaded PDF file object.
@@ -57,34 +61,6 @@ def _build_prompt(job_description: str, resume_text: str) -> str:
     )
 
 
-def _call_openai(prompt: str, model: Optional[str] = None, temperature: float = 0.65, max_tokens: int = 600) -> str:
-    if not OPENAI_API_KEY:
-        return "[OPENAI_API_KEY not set: placeholder output]\n" + prompt[-400:]
-    model = model or os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo")
-    try:
-        if model.startswith("gpt-"):
-            r = openai.ChatCompletion.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": "You write professional, tailored cover letters."},
-                    {"role": "user", "content": prompt},
-                ],
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            return r.choices[0].message["content"].strip()
-        else:
-            c = openai.Completion.create(
-                model=model,
-                prompt=prompt,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            return c.choices[0].text.strip()
-    except Exception as e:
-        return f"[openai_error: {e}]"
-
-
 def _call_gemini(prompt: str, model: Optional[str] = None, temperature: float = 0.65, max_tokens: int = 600) -> str:
     if not GEMINI_API_KEY:
         return "[GEMINI_API_KEY not set: placeholder output]\n" + prompt[-400:]
@@ -113,15 +89,9 @@ def _call_gemini(prompt: str, model: Optional[str] = None, temperature: float = 
         return f"[gemini_error: {e}]"
 
 
-def _call_model(prompt: str, provider: str, temperature: float = 0.65, max_tokens: int = 600) -> dict:
-    provider = provider.lower()
-    if provider == "gemini":
-        text = _call_gemini(prompt, temperature=temperature, max_tokens=max_tokens)
-    else:
-        # default openai
-        text = _call_openai(prompt, temperature=temperature, max_tokens=max_tokens)
-        provider = "openai"
-    return {"text": text, "provider": provider}
+def _call_model(prompt: str, temperature: float = 0.65, max_tokens: int = 600) -> dict:
+    text = _call_gemini(prompt, model=GEMINI_MODEL, temperature=temperature, max_tokens=max_tokens)
+    return {"text": text, "provider": "gemini"}
 
 
 @app.route("/generate_coverletter", methods=["POST"])
@@ -154,23 +124,16 @@ def generate_coverletter():
     else:
         resume_status = "ok"
 
-    provider = (
-        (request.form.get("provider") if not request.is_json else (request.get_json(silent=True) or {}).get("provider"))
-        or request.args.get("provider")
-        or DEFAULT_PROVIDER
-    )
     prompt = _build_prompt(job_description, resume_text or "(No resume text extracted)")
-    model_resp = _call_model(prompt, provider)
+    model_resp = _call_model(prompt)
     cover_letter = model_resp["text"]
 
     return jsonify({
         "cover_letter": cover_letter,
         "resume_text_chars": len(resume_text),
         "resume_parse_status": resume_status,
-        "provider": model_resp["provider"],
-        "model_used": (
-            os.environ.get("OPENAI_MODEL") if model_resp["provider"] == "openai" else os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
-        ),
+    "provider": model_resp["provider"],
+    "model_used": GEMINI_MODEL,
     })
     
 @app.route("/test_coverletter")
@@ -184,11 +147,27 @@ def test_coverletter():
 def health():
     return jsonify({
         "status": "ok",
-        "openai_configured": bool(OPENAI_API_KEY),
-        "gemini_configured": bool(GEMINI_API_KEY),
-        "default_provider": DEFAULT_PROVIDER,
+    "gemini_configured": bool(GEMINI_API_KEY),
+    "default_provider": "gemini",
         "version": os.environ.get("APP_VERSION", "1.0.0"),
     })
+
+
+@app.route("/")
+def index():
+    return (
+        "<html><head><title>Cover Letter API</title></head><body>"
+        "<h2>Cover Letter Generator API</h2>"
+        "<p>POST /generate_coverletter with a PDF resume + job description, or JSON body.</p>"
+        "<form method='POST' action='/generate_coverletter' enctype='multipart/form-data'>"
+        "<div><label>Job Description:<br><textarea name='job_description' rows='6' cols='60'></textarea></label></div>"
+        "<div><label>Resume PDF: <input type='file' name='resume' accept='application/pdf'></label></div>"
+    "<div><strong>Provider:</strong> gemini (only)</div>"
+        "<div><button type='submit'>Generate</button></div>"
+        "</form>"
+        "<p>Health: <a href='/health'>/health</a></p>"
+        "</body></html>"
+    )
 
 
 if __name__ == "__main__":
