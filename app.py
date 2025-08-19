@@ -30,10 +30,8 @@ CORS(
 
 @app.before_request
 def _log_request():  # lightweight request log
-    if request.method == 'OPTIONS':
-        return ('', 204)
     try:
-        print(f"[REQ] {request.method} {request.path}")
+        print(f"[REQ] {request.method} {request.path} Origin={request.headers.get('Origin')}")
     except Exception:
         pass
 
